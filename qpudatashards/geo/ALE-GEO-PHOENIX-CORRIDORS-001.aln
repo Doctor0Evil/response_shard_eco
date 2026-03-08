@@ -1,0 +1,49 @@
+title   = "ALE-GEO-PHOENIX-CORRIDORS-001"
+version = "2026-03-08"
+region  = "Phoenix-AZ-US"
+
+[anchor.downtown_central]
+type   = "UrbanCluster"
+center = { lat = 33.4484, lon = -112.0740 }
+segments = ["sewer_core_corridor","SAT_downtown_cells","heat_WBGT_corridor"]
+
+[anchor.canal_metrocenter_parkway]
+type   = "CanalCluster"
+center = { lat = 33.5640, lon = -112.1150 }  # illustrative canal/Metrocenter
+segments = ["canal_cooling_corridor","SAT_canal_cells","habitat_patch_corridor"]
+
+[segment.sewer_core_corridor]
+kind = "SewerCorridor"
+geojson_ref = "geo/downtown/sewer_core_corridor.geojson"
+corridor_ids = ["WATER_PFAS","WATER_SAT","SEWER_SURCHARGE"]
+smart_chain_ids = ["SMART01_AWP_THERMAL_THERMAPHORA","SMART03_MAR_CEIM"]
+
+[segment.SAT_downtown_cells]
+kind = "SATCells"
+geojson_ref = "geo/downtown/SAT_cells.geojson"
+corridor_ids = ["WATER_PFAS","WATER_SAT","THERMAL_PLUME"]
+smart_chain_ids = ["SMART01_AWP_THERMAL_THERMAPHORA","SMART03_MAR_CEIM"]
+
+[segment.heat_WBGT_corridor]
+kind = "HeatSomaticCorridor"
+geojson_ref = "geo/downtown/heat_WBGT_corridor.geojson"
+corridor_ids = ["THERMAL_WBGT","SOMATIC_HEAT_ROUTE"]
+smart_chain_ids = ["SMART01_AWP_THERMAL_THERMAPHORA","SMART07_EQUITY_FLOWS"]
+
+[segment.canal_cooling_corridor]
+kind = "CanalCooling"
+geojson_ref = "geo/canal/canal_cooling_corridor.geojson"
+corridor_ids = ["WATER_PFAS","THERMAL_PLUME","BIOTIC_TREATY"]
+smart_chain_ids = ["SMART01_AWP_THERMAL_THERMAPHORA","SMART04_CANAL_BIOTIC_TREATY"]
+
+[segment.SAT_canal_cells]
+kind = "SATCells"
+geojson_ref = "geo/canal/SAT_canal_cells.geojson"
+corridor_ids = ["WATER_PFAS","WATER_SAT","THERMAL_PLUME"]
+smart_chain_ids = ["SMART01_AWP_THERMAL_THERMAPHORA","SMART03_MAR_CEIM"]
+
+[segment.habitat_patch_corridor]
+kind = "HabitatPatch"
+geojson_ref = "geo/canal/habitat_patch_corridor.geojson"
+corridor_ids = ["BIOTIC_TREATY","BIOTIC_SHEAR_HABITAT"]
+smart_chain_ids = ["SMART04_CANAL_BIOTIC_TREATY"]
