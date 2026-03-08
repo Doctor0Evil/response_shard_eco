@@ -1,0 +1,32 @@
+title   = "ALE-ERM-RISKCOORD-VOCAB-001"
+version = "2026-03-08"
+region  = "Phoenix-AZ-US"
+
+[water.rx]
+mandatory = [
+  "r_PFAS","r_pharma","r_nutrient",
+  "r_SAT","r_DO","r_temp","r_surcharge"
+]
+
+[thermal.rx]
+mandatory = ["r_thermal_plume","r_WBGT"]
+
+[waste.rx]
+mandatory = ["r_foul","r_sludge","r_backpressure"]
+
+[biotic.rx]
+mandatory = ["r_pathogen","r_biofilm_fouling","r_CEC","r_shear_habitat"]
+
+[neurobiome.rx]
+mandatory = ["r_neurobio_surface"]
+
+[somatic.rx]
+mandatory = ["r_flood_somatic","r_trip_fall_path","r_heat_route"]
+
+[treaty.rx]
+mandatory = ["r_treaty_flow","r_indigenous_rights","r_biotic_treaty"]
+
+[Vt.roles]
+local_name  = "Vt_local"
+global_name = "Vt_global"
+invariant   = "V_t+1 <= V_t outside safe interior"
