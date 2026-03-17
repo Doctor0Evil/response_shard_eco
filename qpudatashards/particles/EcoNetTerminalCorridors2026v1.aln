@@ -1,0 +1,52 @@
+TITLE EcoNetTerminalCorridors2026v1
+DESTINATION qpudatashardsparticlesEcoNetTerminalCorridors2026v1.aln
+VERSION 1.0.0
+
+aln EcoNetTerminalCorridors2026v1
+
+header
+  field shard_type        string
+  field region            string
+  field timestamputc      string
+  field did_author        string
+  field did_signature_hex string
+end
+
+table corridors
+  field var_id       string   -- r_cpu, r_ram, r_net
+  field safe         f64
+  field gold         f64
+  field hard         f64
+  field weight       f64
+  field lyap_channel u8
+  field measured_rx  f64      -- normalized 0–1 host usage
+end
+
+table ker
+  field knowledge_factor01 f64
+  field eco_impact_value01 f64
+  field risk_of_harm01     f64
+end
+
+predicate corridor_present
+  requires exists c in corridors where c.var_id = "r_cpu"
+  requires exists c in corridors where c.var_id = "r_ram"
+  requires exists c in corridors where c.var_id = "r_net"
+end
+
+predicate residual_safe
+  let vt = sum c in corridors => c.weight * c.measured_rx
+  requires vt <= 1.0
+end
+
+predicate ker_deployable
+  requires ker.knowledge_factor01 >= 0.90
+  requires ker.eco_impact_value01 >= 0.90
+  requires ker.risk_of_harm01     <= 0.13
+end
+
+invariant invariant.econet_terminal_corridors
+  corridor_present
+  residual_safe
+  ker_deployable
+end
