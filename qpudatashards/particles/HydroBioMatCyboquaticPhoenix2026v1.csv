@@ -1,0 +1,22 @@
+ALNSHARDID,HydroBioMatCyboquaticPhoenix2026v1
+KERCONTEXT,K0.94,E0.91,R0.13_domainHydroBioMatCybo_regionPHX_specCEIM-CPVM-ESPD-2026
+ALNSPECHASH,0xa1b2c3d4e5f67890f1e2d3c4b5a6978899aa77cc55ee3311
+
+nodeid,region,lat,lon,
+tstart_s,tend_s,
+q_m3s,hlr_m_per_h,head_m,
+c_pfas_ngL,c_cec_mgL,temp_C,
+substrate_id,t90_days,r_tox,r_micro,r_leach_cec,r_pfas_resid,
+rcarbon,r_hlr,r_pfas,r_t90,r_materials,
+vt,k_knowledge,e_ecoimpact,r_riskofharm,
+corridor_present,safestep,ker_deployable,
+hexstamp,notes
+PHX-CANAL-01,PHX-West,33.4500,-112.1500,
+0,3600,
+0.29,0.25,123.5,
+12.4,0.39,22.7,
+MAT-BAGASSE-01,85.0,0.03,0.01,0.02,0.01,
+0.12,0.24,0.10,0.18,0.15,
+0.092,0.94,0.91,0.12,
+TRUE,TRUE,TRUE,
+0xa1b2...,cyboquatic industrial vault pilot
