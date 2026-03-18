@@ -1,0 +1,27 @@
+nodeid,region,houselabel,roomlabel,applianceclass,adaptertype,
+varid,unit,safe,gold,hard,weight,lyapchannel,mandatory,
+ratedpowerW,ratednoise_dBA,
+knowledgefactor01,ecoimpact01,riskofharm01,
+pdss_duty_fraction,pdss_energy_kWh_per_day,baseline_pesticide_g_per_day_avoided,
+bostrom_tx_hex,evidencehex,notes
+
+PHX-FLAT-01-FAN1,US-AZ-Phoenix,Flat-01,Bedroom-1,Fan,SmartPlug,
+rnoise,dBA,25,35,45,0.40,0,true,
+60,45,
+0.94,0.91,0.13,
+0.30,0.018,0.5,
+0xa10b23c4d5e6071891,0xb21c34d5e6f7082912,"Box fan night profile"
+
+PHX-FLAT-01-FAN1,US-AZ-Phoenix,Flat-01,Bedroom-1,Fan,SmartPlug,
+rthermal,degC,2,5,8,0.35,1,true,
+60,45,
+0.94,0.91,0.13,
+0.30,0.018,0.5,
+0xa10b23c4d5e6071891,0xb21c34d5e6f7082912,"Surface rise corridor"
+
+PHX-FLAT-01-FAN1,US-AZ-Phoenix,Flat-01,Bedroom-1,Fan,SmartPlug,
+rvib,idx,0.2,0.6,1.0,0.25,2,true,
+60,45,
+0.94,0.91,0.13,
+0.30,0.018,0.5,
+0xa10b23c4d5e6071891,0xb21c34d5e6f7082912,"Vibration corridor"
