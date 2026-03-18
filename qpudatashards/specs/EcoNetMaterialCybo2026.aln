@@ -1,0 +1,59 @@
+spec EcoNetMaterialCybo2026 v1.0.0
+
+path qpudatashards/particles/EcoNetMaterialCyboT90PFAS2026v1.csv
+
+role MaterialNode
+
+fields
+  node_id           : String
+  material_id       : String
+  matrix_id         : String
+  temp_c            : F64
+  ph                : F64
+  t90_days          : F64
+  r_tox             : F64
+  r_micro           : F64
+  r_leach_cec       : F64
+  r_pfas_resid      : F64
+  k_score           : F64
+  e_score           : F64
+  r_residual        : F64
+  ecoimpact_level   : String
+  criterion_pass    : Bool
+  hexstamp          : Hex
+  notes             : String
+
+corridors
+  t90_max_days   = 180.0
+  t90_gold_days  = 120.0
+  r_tox_gold_max = 0.10
+  r_micro_max    = 0.05
+  r_leach_max    = 0.10
+  r_pfas_max     = 0.10
+  k_min          = 0.90
+  e_min          = 0.90
+  r_max          = 0.13
+
+kernels
+  risk_coords:
+    rt90        = norm_lin(t90_days, 0.0, t90_gold_days, t90_max_days)
+    rtox        = clamp01(r_tox / r_tox_gold_max)
+    rmicro      = clamp01(r_micro / r_micro_max)
+    rleach      = clamp01(r_leach_cec / r_leach_max)
+    rpfas       = clamp01(r_pfas_resid / r_pfas_max)
+
+  ker_triad:
+    r_residual  = max(rt90, rtox, rmicro, rleach, rpfas)
+    k_score     = 1.0
+    e_score     = clamp01(1.0 - r_residual)
+
+admissibility
+  criterion_pass =
+    (t90_days <= t90_max_days) &&
+    (r_tox    <= r_tox_gold_max) &&
+    (r_micro  <= r_micro_max) &&
+    (r_leach_cec <= r_leach_max) &&
+    (r_pfas_resid <= r_pfas_max) &&
+    (k_score >= k_min) &&
+    (e_score >= e_min) &&
+    (r_residual <= r_max)
