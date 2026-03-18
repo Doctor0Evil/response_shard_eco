@@ -1,4 +1,1 @@
-nodeid,timestamputc,region,houselabel,roomlabel,simorlive,
-rnoise,rthermal,rvib,Vt,knowledgefactor01,ecoimpact01,riskofharm01,
-pdss_duty_fraction,pdss_energy_kWh_per_day,baseline_pesticide_g_per_day_avoided,
-bostrom_tx_hex,evidencehex,lane,kerdeployable
+nodeid,timestamputc,region,houselabel,roomlabel,simorlive,rnoise,rthermal,rvib,Vt,knowledgefactor01,ecoimpact01,riskofharm01,pdss_duty_fraction,pdss_energy_kWh_per_day,baseline_pesticide_g_per_day_avoided,bostrom_tx_hex,evidencehex,lane,kerdeployable
