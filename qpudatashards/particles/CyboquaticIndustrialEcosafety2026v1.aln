@@ -1,0 +1,86 @@
+# Cyboquatic Industrial Machinery Ecosafety Spine Shard
+# Schema aligned with CEIM/CPVM ecosafety grammar and K/E/R metrics
+
+shard CyboquaticIndustrialEcosafety2026v1 {
+  row CyboNode {
+    nodeid: String
+    nodetype: Enum("MAR_MODULE","FOG_DESICCATOR","AIR_GLOBE","CAIN","CANAL_PURIFIER","OTHER")
+    medium:   Enum("WATER","AIR","FOG","MIXED")
+    region:   String
+    site:     String
+    lat:      Float
+    lon:      Float
+
+    # Time window for aggregated metrics
+    twindow_start: DateTime
+    twindow_end:   DateTime
+
+    # Core CEIM/CPVM mass-balance and eco-benefit
+    m_captured_kg:   Float      # ∑x Mx from CEIM over pollutants
+    m_embodied_kg:   Float      # materials life-cycle mass burden
+    m_power_kgco2:   Float      # energy-associated CO2-equivalent
+    m_ref_kg:        Float      # normalization reference mass
+    eco_b_raw:       Float      # B_raw = (M_captured - M_embodied - M_power)/M_ref
+
+    # K/E/R governance metrics
+    k_knowledge:     Float      # 0..1 evidence density, telemetry-model agreement
+    e_ecoimpact:     Float      # 0..1 net eco-benefit score
+    r_riskofharm:    Float      # 0..1 residual risk (corridor distance + uncertainty)
+
+    # Normalized risk coordinates on five planes (energy, hydraulics, biology, carbon, materials)
+    r_energy:        Float      # r_E  (e.g., kWh per kg removed vs corridors)
+    r_hydraulics:    Float      # r_H  (e.g., head, surcharge, overflow probabilities)
+    r_biology:       Float      # r_B  (e.g., PFAS, E. coli, toxicity, SAT)
+    r_carbon:        Float      # r_C  (e.g., net carbon balance vs target)
+    r_materials:     Float      # r_M  (e.g., t90, leachate, micro-particles)
+
+    # Expanded biological/material coordinates reusing existing ecosafety kernels
+    r_pfas:          Float
+    r_ecoli:         Float
+    r_nutrient:      Float
+    r_tds:           Float
+    r_sat:           Float
+    r_t90_soil:      Float
+    r_tox_soil:      Float
+    r_micro_soil:    Float
+    r_t90_aquatic:   Float
+    r_tox_aquatic:   Float
+    r_micro_aquatic: Float
+
+    # Lyapunov residual over normalized risks with parametric weights
+    w_energy:        Float
+    w_hydraulics:    Float
+    w_biology:       Float
+    w_carbon:        Float
+    w_materials:     Float
+    v_residual:      Float      # V(t) = Σ w_i r_i^2
+    v_residual_max:  Float      # corridor upper bound for V over window
+
+    # Sensor trust and calibration-error modulation (Multonry Dt)
+    dt_trust:        Float      # 0..1 sensor trust scalar
+    b_adj:           Float      # eco_b_raw * dt_trust
+    k_adj:           Float      # k_knowledge * dt_trust
+    e_adj:           Float      # e_ecoimpact * dt_trust
+
+    # Safety contracts and lane governance
+    corridor_present: Bool      # corridorpresent(ctx)
+    safestep_ok:      Bool      # aggregate flag for safestep(ctx,t) over window
+    lane:            Enum("RESEARCH","EXPERIMENTAL","PRODUCTION")
+
+    # Security / FOG routing predicates
+    security_response_cap: Enum("LOW","MEDIUM","HIGH")
+    fog_routing_mode:      Enum("DIRECT","DESICCATE","BYPASS","SHUTDOWN")
+
+    # Kernel and corridor provenance
+    risk_kernel_version:   String
+    corridor_table_id:     String
+    ceim_kernel_version:   String
+    cpvm_kernel_version:   String
+
+    # Evidence and signatures (ALN / blockchain)
+    evidence_hex:          Hex
+    signing_hex:           Hex
+  }
+}
+
+# Global research hex for this shard: 5c3e9a7f2d1840b6a99f3c2e5b8047d1
