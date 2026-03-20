@@ -1,0 +1,286 @@
+# ============================================================================
+# Ecotribute Response Shard Eco - Docker Compose Orchestration
+# Module: response_shard_eco/deploy/docker-compose.yml
+# Version: 1.0.0 (ALN Contract Hex: 0x7f8a9b)
+#
+# Purpose:
+#   Orchestrates the polyglot microservices architecture for ecological restoration.
+#   Ensures safe startup sequencing, persistent storage for shards/ledger,
+#   and secure networking between Rust, Python, Go, C++, and ALN components.
+#
+# Safety Invariants:
+#   1. Database must be healthy before any writer service starts.
+#   2. Safety thresholds (KER limits) enforced via environment variables.
+#   3. Persistent volumes for audit logs and shard storage (20-50 year continuity).
+#   4. Internal network isolation for critical infrastructure.
+#
+# Usage:
+#   docker-compose up -d
+#   docker-compose logs -f
+#   docker-compose down -v (Warning: Deletes persistent data)
+# ============================================================================
+
+version: "3.9"
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Persistent Ledger Database (PostgreSQL)
+  # ----------------------------------------------------------------------------
+  db-ledger:
+    image: postgres:14-alpine
+    container_name: ecotribute-db-ledger
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ecotribute_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_DB: ecotribute_ledger
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ../src/sql/schema/ecotribute_ledger.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./logs/db:/var/log/postgresql
+    secrets:
+      - db_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecotribute_admin -d ecotribute_ledger"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecotribute-internal
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ----------------------------------------------------------------------------
+  # 2. Rust Kernel (Core KER & Shard Logic)
+  # ----------------------------------------------------------------------------
+  rust-kernel:
+    build:
+      context: ..
+      dockerfile: src/shard/Dockerfile
+    container_name: ecotribute-rust-kernel
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=info
+      - CONTRACT_HEX_STAMP=0x7f8a9b
+      - MIN_KNOWLEDGE_FACTOR=0.85
+      - MAX_RISK_HARM=0.20
+      - DATABASE_URL=postgres://ecotribute_admin:@db-ledger:5432/ecotribute_ledger
+    volumes:
+      - ./shards:/var/ecotribute/shards
+      - ./logs/kernel:/var/log/ecotribute
+    depends_on:
+      db-ledger:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/usr/bin/ecotribute_kernel", "--health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ecotribute-internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ----------------------------------------------------------------------------
+  # 3. Python Eco-Wealth Tracker (Analytics & Rewards)
+  # ----------------------------------------------------------------------------
+  python-tracker:
+    build:
+      context: ..
+      dockerfile: src/python/analysis/Dockerfile
+    container_name: ecotribute-python-tracker
+    restart: unless-stopped
+    command: ["python3", "src/python/analysis/eco_wealth_tracker.py", "--process"]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CONTRACT_HEX_STAMP=0x7f8a9b
+      - DATABASE_URL=postgres://ecotribute_admin:@db-ledger:5432/ecotribute_ledger
+      - MIN_ECO_IMPACT=0.50
+      - STEP_WINDOW_REQUIREMENT=5
+    volumes:
+      - ./shards:/var/ecotribute/shards:ro
+      - ./analysis:/var/ecotribute/analysis
+      - ./logs/tracker:/var/log/ecotribute
+    depends_on:
+      db-ledger:
+        condition: service_healthy
+      rust-kernel:
+        condition: service_healthy
+    networks:
+      - ecotribute-internal
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ----------------------------------------------------------------------------
+  # 4. Go Regional Orchestrator (Portfolio Optimization)
+  # ----------------------------------------------------------------------------
+  go-orchestrator:
+    build:
+      context: ..
+      dockerfile: src/go/orchestrator/Dockerfile
+    container_name: ecotribute-go-orchestrator
+    restart: unless-stopped
+    command: ["./orchestrator", "--region=phoenix_pilot_zone"]
+    environment:
+      - GOMAXPROCS=2
+      - CONTRACT_HEX_STAMP=0x7f8a9b
+      - DATABASE_URL=postgres://ecotribute_admin:@db-ledger:5432/ecotribute_ledger
+      - REGIONAL_RISK_LIMIT=0.8
+      - ALN_RPC_URL=http://aln-client:8545
+    volumes:
+      - ./logs/orchestrator:/var/log/ecotribute
+    depends_on:
+      db-ledger:
+        condition: service_healthy
+      python-tracker:
+        condition: service_started
+    networks:
+      - ecotribute-internal
+      - aln-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ----------------------------------------------------------------------------
+  # 5. C++ Cyboquatic Node Simulator (Hardware Control Loop)
+  # ----------------------------------------------------------------------------
+  cpp-sim-node:
+    build:
+      context: ..
+      dockerfile: src/cpp/simulation/Dockerfile
+    container_name: ecotribute-cpp-sim-node
+    restart: unless-stopped
+    command: ["./cyboquatic_node", "node_phoenix_01", "did:bostrom:ecotribute:agent_auto_01#v1"]
+    environment:
+      - CONTRACT_HEX_STAMP=0x7f8a9b
+      - NODE_ID=node_phoenix_01
+      - BOSTROM_DID=did:bostrom:ecotribute:agent_auto_01#v1
+      - SHARD_OUTPUT_DIR=/var/ecotribute/shards
+      - SAFETY_GATE_ENABLED=true
+    volumes:
+      - ./shards:/var/ecotribute/shards
+      - ./logs/node:/var/log/ecotribute
+    depends_on:
+      rust-kernel:
+        condition: service_healthy
+    networks:
+      - ecotribute-internal
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    # Simulate hardware constraints
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 2048
+
+  # ----------------------------------------------------------------------------
+  # 6. Rust ALN Client (Blockchain Interface)
+  # ----------------------------------------------------------------------------
+  aln-client:
+    build:
+      context: ..
+      dockerfile: src/rust/aln_client/Dockerfile
+    container_name: ecotribute-aln-client
+    restart: unless-stopped
+    ports:
+      - "8545:8545" # Expose RPC locally for orchestrator
+    environment:
+      - RUST_LOG=warn
+      - ALN_RPC_URL=https://aln.ecotribute.global/rpc
+      - CONTRACT_ADDRESS=0xEcoSafetyGate1234567890abcdef
+      - CONTRACT_HEX_STAMP=0x7f8a9b
+      - WALLET_KEY_FILE=/run/secrets/aln_wallet_key
+    secrets:
+      - aln_wallet_key
+    volumes:
+      - ./logs/aln:/var/log/ecotribute
+    networks:
+      - aln-network
+      - ecotribute-internal
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ----------------------------------------------------------------------------
+  # 7. Lua Daily Automation (Cron-like Scheduler)
+  # ----------------------------------------------------------------------------
+  lua-automation:
+    image: lua:5.4-alpine
+    container_name: ecotribute-lua-automation
+    restart: unless-stopped
+    command: ["lua", "/scripts/daily_loop.lua"]
+    volumes:
+      - ../scripts/automation/daily_loop.lua:/scripts/daily_loop.lua:ro
+      - ./shards:/var/ecotribute/shards
+      - ./logs/automation:/var/log/ecotribute
+    environment:
+      - CONTRACT_HEX_STAMP=0x7f8a9b
+      - SHARD_OUTPUT_DIR=/var/ecotribute/shards
+    depends_on:
+      rust-kernel:
+        condition: service_healthy
+    networks:
+      - ecotribute-internal
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+# ============================================================================
+# Networks
+# ============================================================================
+
+networks:
+  # Internal secure network for core services
+  ecotribute-internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+  # Separate network for ALN Blockchain interaction
+  aln-network:
+    driver: bridge
+    internal: false
+
+# ============================================================================
+# Volumes
+# ============================================================================
+
+volumes:
+  db-data:
+    driver: local
+    labels:
+      - "ecotribute.preservation=50years"
+  # Shard storage is bind-mounted to host for easy access/backup
+
+# ============================================================================
+# Secrets
+# ============================================================================
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  aln_wallet_key:
+    file: ./secrets/aln_wallet_key.txt
+
+# ============================================================================
+# Labels & Metadata
+# ============================================================================
+
+x-ecotribute-metadata:
+  project: response_shard_eco
+  contract_hex: 0x7f8a9b
+  safety_invariant: "V_t+1 <= V_t"
+  identity_system: "Bostrom DID"
+  continuity_horizon: "20-50 years"
