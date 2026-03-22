@@ -1,21 +1,27 @@
-// filename: cyboquatic-ecosafety-core/src/lib.rs
-// destination: cyboquatic-ecosafety-core/src/lib.rs
+//! cyboquatic-ecosafety-core
+//! Rust ecosafety spine for Cyboquatic industrial machinery (rx/Vt/KER).
+//! All domains (MAR, FlowVac, FOG, wetlands, trays, air plenums) parameterize this grammar.
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+#![forbid(unsafe_code)]
 
-/// Dimensionless risk coordinate in [0,1].
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct RiskCoord(pub f64);
+use std::time::{Duration, Instant};
+
+/// Dimensionless risk coordinate r ∈ [0,1], clamped.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RiskCoord(f64);
 
 impl RiskCoord {
-    pub fn clamped(x: f64) -> Self {
-        RiskCoord(if x < 0.0 { 0.0 } else if x > 1.0 { 1.0 } else { x })
+    pub fn new(raw: f64) -> Self {
+        RiskCoord(raw.clamp(0.0, 1.0))
+    }
+    pub fn value(self) -> f64 {
+        self.0
     }
 }
 
-/// Corridor bands for a single physical variable.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Corridor bands for a single physical metric.
+/// Safe ≤ Gold ≤ Hard, all in raw physical units (e.g., mg/L, m/d, days).
+#[derive(Clone, Copy, Debug)]
 pub struct CorridorBands {
     pub safe: f64,
     pub gold: f64,
@@ -23,102 +29,169 @@ pub struct CorridorBands {
 }
 
 impl CorridorBands {
-    /// Piecewise-linear normalization used across Cyboquatic, MAR, trays, etc.
-    /// x <= safe   -> 0
-    /// x >= hard   -> 1
-    /// safe < x < gold: mild slope
-    /// gold <= x < hard: steeper slope
+    pub fn assert_well_formed(&self) {
+        assert!(
+            self.safe <= self.gold && self.gold <= self.hard,
+            "CorridorBands must satisfy safe ≤ gold ≤ hard"
+        );
+    }
+
+    /// Piecewise-linear normalization into RiskCoord using safe/gold/hard bands.[file:7]
     pub fn normalize(&self, x: f64) -> RiskCoord {
-        let (safe, gold, hard) = (self.safe, self.gold, self.hard);
-        if x <= safe {
-            RiskCoord(0.0)
-        } else if x >= hard {
-            RiskCoord(1.0)
-        } else if x < gold {
-            let t = (x - safe) / (gold - safe).max(1e-12);
-            RiskCoord::clamped(0.5 * t)
-        } else {
-            let t = (x - gold) / (hard - gold).max(1e-12);
-            RiskCoord::clamped(0.5 + 0.5 * t)
+        self.assert_well_formed();
+
+        if x <= self.safe {
+            return RiskCoord::new(0.0);
         }
+        if x >= self.hard {
+            return RiskCoord::new(1.0);
+        }
+
+        if x <= self.gold {
+            // Gentle slope between safe and gold.
+            let num = x - self.safe;
+            let den = (self.gold - self.safe).max(f64::EPSILON);
+            return RiskCoord::new(num / den * 0.5);
+        }
+
+        // Steeper slope from gold to hard, mapping into (0.5, 1.0).
+        let num = x - self.gold;
+        let den = (self.hard - self.gold).max(f64::EPSILON);
+        RiskCoord::new(0.5 + num / den * 0.5)
     }
 }
 
-/// Normalized risk vector for a node at one instant.
-pub type RiskVector = HashMap<String, RiskCoord>;
+/// Fixed-size vector of risk coordinates for core Cyboquatic planes:
+/// [0] energy, [1] hydraulics, [2] biology, [3] carbon, [4] materials.[file:3][file:11]
+#[derive(Clone, Copy, Debug)]
+pub struct RiskVector {
+    pub energy: RiskCoord,
+    pub hydraulics: RiskCoord,
+    pub biology: RiskCoord,
+    pub carbon: RiskCoord,
+    pub materials: RiskCoord,
+}
 
-/// Lyapunov residual V_t = Σ w_j r_j^2 with non-increase invariant.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+impl RiskVector {
+    pub fn max_coord(&self) -> RiskCoord {
+        let vals = [
+            self.energy.value(),
+            self.hydraulics.value(),
+            self.biology.value(),
+            self.carbon.value(),
+            self.materials.value(),
+        ];
+        RiskCoord::new(vals.iter().cloned().fold(0.0, f64::max))
+    }
+}
+
+/// Weights for Lyapunov residual over the five planes.[file:3]
+#[derive(Clone, Copy, Debug)]
+pub struct ResidualWeights {
+    pub w_energy: f64,
+    pub w_hydraulics: f64,
+    pub w_biology: f64,
+    pub w_carbon: f64,
+    pub w_materials: f64,
+}
+
+impl ResidualWeights {
+    pub fn assert_non_negative(&self) {
+        assert!(self.w_energy >= 0.0);
+        assert!(self.w_hydraulics >= 0.0);
+        assert!(self.w_biology >= 0.0);
+        assert!(self.w_carbon >= 0.0);
+        assert!(self.w_materials >= 0.0);
+    }
+}
+
+/// Lyapunov residual V_t = Σ w_j * r_j^2.[file:3][file:11]
+#[derive(Clone, Copy, Debug)]
 pub struct ResidualState {
     pub vt: f64,
 }
 
 impl ResidualState {
-    pub fn new() -> Self {
-        ResidualState { vt: 0.0 }
+    pub fn from_risks(r: &RiskVector, w: &ResidualWeights) -> Self {
+        w.assert_non_negative();
+        let v =
+            w.w_energy * r.energy.value().powi(2) +
+            w.w_hydraulics * r.hydraulics.value().powi(2) +
+            w.w_biology * r.biology.value().powi(2) +
+            w.w_carbon * r.carbon.value().powi(2) +
+            w.w_materials * r.materials.value().powi(2);
+        ResidualState { vt: v }
     }
 
-    pub fn update(&mut self, risks: &RiskVector, weights: &HashMap<String, f64>) -> f64 {
-        let mut vt_new = 0.0;
-        for (k, r) in risks {
-            let w = *weights.get(k).unwrap_or(&1.0);
-            vt_new += w * r.0 * r.0;
-        }
-        let vt_prev = self.vt;
-        self.vt = vt_new;
-        vt_prev
-    }
-
-    pub fn safestep_ok(&self, vt_prev: f64, eps: f64) -> bool {
-        self.vt <= vt_prev + eps
+    /// Check Lyapunov invariant V_{t+1} ≤ V_t + ε.[file:3][file:7]
+    pub fn safestep_ok(&self, prev: &ResidualState, eps_vt: f64) -> bool {
+        self.vt <= prev.vt + eps_vt
     }
 }
 
-/// K/E/R triad computed from a time window.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+/// Decision taken by ecosafety kernel for a proposed step.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CorridorDecision {
+    Normal,
+    Derate,
+    Stop,
+}
+
+/// Rolling-window KER metrics.[file:3][file:7]
+#[derive(Clone, Copy, Debug)]
 pub struct KerTriad {
     pub k_knowledge: f64,
     pub e_eco_impact: f64,
     pub r_risk_of_harm: f64,
 }
 
-/// Rolling window accumulator for K/E/R over a trajectory.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct KerWindow {
-    pub total_steps: u64,
-    pub lyapunov_safe_steps: u64,
-    pub max_risk: f64,
+    window_start: Instant,
+    window_duration: Duration,
+    steps_total: u64,
+    steps_lyap_safe: u64,
+    r_max: f64,
 }
 
 impl KerWindow {
-    pub fn new() -> Self {
+    pub fn new(window_duration: Duration) -> Self {
         KerWindow {
-            total_steps: 0,
-            lyapunov_safe_steps: 0,
-            max_risk: 0.0,
+            window_start: Instant::now(),
+            window_duration,
+            steps_total: 0,
+            steps_lyap_safe: 0,
+            r_max: 0.0,
         }
     }
 
-    pub fn observe_step(&mut self, risks: &RiskVector, safestep_ok: bool) {
-        self.total_steps += 1;
-        if safestep_ok {
-            self.lyapunov_safe_steps += 1;
+    pub fn observe_step(&mut self, risk_vec: &RiskVector, lyap_safe: bool) {
+        self.steps_total += 1;
+        if lyap_safe {
+            self.steps_lyap_safe += 1;
         }
-        for r in risks.values() {
-            if r.0 > self.max_risk {
-                self.max_risk = r.0;
-            }
+        let r = risk_vec.max_coord().value();
+        if r > self.r_max {
+            self.r_max = r;
+        }
+
+        if self.window_start.elapsed() >= self.window_duration {
+            // Reset window but keep last r_max as baseline.
+            self.window_start = Instant::now();
+            self.steps_total = 0;
+            self.steps_lyap_safe = 0;
+            self.r_max = r;
         }
     }
 
-    pub fn finalize(&self) -> KerTriad {
-        let k = if self.total_steps == 0 {
-            0.0
+    pub fn triad(&self) -> KerTriad {
+        let k = if self.steps_total == 0 {
+            1.0
         } else {
-            self.lyapunov_safe_steps as f64 / self.total_steps as f64
+            self.steps_lyap_safe as f64 / self.steps_total as f64
         };
-        let r = self.max_risk;
-        let e = (1.0 - r).max(0.0).min(1.0);
+        let r = self.r_max.clamp(0.0, 1.0);
+        let e = (1.0 - r).clamp(0.0, 1.0);
         KerTriad {
             k_knowledge: k,
             e_eco_impact: e,
@@ -127,42 +200,68 @@ impl KerWindow {
     }
 }
 
-/// Trait implemented by any Cyboquatic industrial machine controller.
-pub trait SafeController {
-    /// Compute next actuation proposal and associated risk vector.
-    fn propose_step(&self) -> (RiskVector, HashMap<String, f64>);
-
-    /// Apply actuation if ecosafety kernel accepts it.
-    fn apply_step(&mut self);
+/// Trait every Cyboquatic controller must implement: no action without a RiskVector.[file:3][file:7]
+pub trait SafeController<S, A> {
+    /// Propose an actuation given current plant state.
+    /// Must also emit a full RiskVector for ecosafety evaluation.
+    fn propose_step(&mut self, state: &S) -> (A, RiskVector);
 }
 
-/// Ecosafety kernel implementing "no corridor, no build" and safestep gates.
-pub struct EcoSafetyKernel {
+/// Ecosafety kernel that wraps controllers and enforces corridors and Lyapunov invariant.[file:3][file:11]
+pub struct EcoSafetyKernel<S, A> {
+    pub residual_prev: ResidualState,
+    pub weights: ResidualWeights,
     pub eps_vt: f64,
-    pub residual: ResidualState,
+    pub window: KerWindow,
+    _phantom_s: std::marker::PhantomData<S>,
+    _phantom_a: std::marker::PhantomData<A>,
 }
 
-impl EcoSafetyKernel {
-    pub fn new(eps_vt: f64) -> Self {
-        EcoSafetyKernel {
+impl<S, A> EcoSafetyKernel<S, A> {
+    pub fn new(weights: ResidualWeights, eps_vt: f64, window_duration: Duration) -> Self {
+        Self {
+            residual_prev: ResidualState { vt: 0.0 },
+            weights,
             eps_vt,
-            residual: ResidualState::new(),
+            window: KerWindow::new(window_duration),
+            _phantom_s: std::marker::PhantomData,
+            _phantom_a: std::marker::PhantomData,
         }
     }
 
-    /// Gate a controller step; returns true only if all invariants hold.
-    pub fn evaluate_step<C: SafeController>(
+    /// Evaluate a proposed step and return (CorridorDecision, maybe_actuation).
+    /// Actuation is None if the step is rejected or derated.[file:3][file:11]
+    pub fn evaluate_step<C>(
         &mut self,
         controller: &mut C,
-        window: &mut KerWindow,
-    ) -> bool {
-        let (risks, weights) = controller.propose_step();
-        let vt_prev = self.residual.update(&risks, &weights);
-        let ok = self.residual.safestep_ok(vt_prev, self.eps_vt);
-        window.observe_step(&risks, ok);
-        if ok {
-            controller.apply_step();
+        state: &S,
+    ) -> (CorridorDecision, Option<A>)
+    where
+        C: SafeController<S, A>,
+    {
+        let (act, rv) = controller.propose_step(state);
+        let residual_new = ResidualState::from_risks(&rv, &self.weights);
+
+        // Any coordinate at 1.0 is a hard violation.
+        let r_max = rv.max_coord().value();
+        let hard_violation = (r_max - 1.0).abs() < 1e-9 || r_max > 1.0;
+
+        let lyap_ok = residual_new.safestep_ok(&self.residual_prev, self.eps_vt);
+        self.window.observe_step(&rv, lyap_ok && !hard_violation);
+
+        if hard_violation {
+            self.residual_prev = residual_new;
+            return (CorridorDecision::Stop, None);
         }
-        ok
+
+        if !lyap_ok {
+            // Soft breach: derate and do not actuate.[file:3]
+            self.residual_prev = residual_new;
+            return (CorridorDecision::Derate, None);
+        }
+
+        // Safe step: actuation allowed.
+        self.residual_prev = residual_new;
+        (CorridorDecision::Normal, Some(act))
     }
 }
